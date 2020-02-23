@@ -4,9 +4,25 @@
 #include <wiiuse/wpad.h>
 #include <ogc/ios.h>
 #include <unistd.h>
+#include <string.h>
 
 static void *xfb = NULL;
 static GXRModeObj *rmode = NULL;
+
+void print(ioctlv* names, int size, int term_width) {
+	for (s32 i = 0; i < size; ++i) {
+		char* str = names[i].data;
+		size_t len = strlen(str);
+		if (len > term_width - 2) {
+			strcpy(str + (term_width - 4), "...");
+		}
+		printf("\x1b[%i;0H  %s\n", i, str);
+	}
+}
+
+int min(int a, int b) {
+	return a < b ? a : b;
+}
 
 //---------------------------------------------------------------------------------
 int main(int argc, char **argv) {
@@ -44,6 +60,12 @@ int main(int argc, char **argv) {
 	VIDEO_WaitVSync();
 	if(rmode->viTVMode&VI_NON_INTERLACE) VIDEO_WaitVSync();
 
+	int term_width;
+	int term_height;
+	CON_GetMetrics(&term_width, &term_height);
+	term_height -= 1;
+	term_width -= 1;
+
 
 	// The console understands VT terminal escape codes
 	// This positions the cursor on row 2, column 0
@@ -55,22 +77,21 @@ int main(int argc, char **argv) {
 	s32 disc = 0;
 	s32 size = 0;
 
+	ioctlv* names;
+
 	if (fd != -1) {
 		ioctlv get_size[] = {{&size, sizeof(size)}};
 		ret = IOS_Ioctlv(fd, 0x06, 0, 1, get_size);
 		if (ret == 0) {
-			ioctlv* get_names = malloc(size * sizeof(ioctlv));
+			names = malloc(size * sizeof(ioctlv));
 			for (s32 i = 0; i < size; ++i) {
-				char* buf = malloc(256);
-				get_names[i] = (ioctlv){buf, 256};
+				char* buf = malloc(257);
+				buf[256] = 0;
+				names[i] = (ioctlv){buf, 256};
 			}
-			ret = IOS_Ioctlv(fd, 0x07, 0, size, get_names);
-			if (ret == 0) {
-				for (s32 i = 0; i < size; ++i) {
-					printf("  %.256s\n", (char*) get_names[i].data);
-					free(get_names[i].data);
-				}
-			} else {
+			ret = IOS_Ioctlv(fd, 0x07, 0, size, names);
+			if (ret != 0) {
+				free(names);
 				printf("0x07 = %d", ret);
 				sleep(5);
 				SYS_ResetSystem(SYS_RETURNTOMENU,0,0);
@@ -89,7 +110,12 @@ int main(int argc, char **argv) {
 	}
 
 	while(1) {
-		printf("\x1b[%d;0H*", disc);
+		printf("\x1b[0;0H");
+		printf("\x1b[2J");
+		s32 page = disc / term_height;
+		s32 page_pos = disc % term_height;
+		print(names + page * term_height, min(term_height, size - (page * term_height)), term_width);
+		printf("\x1b[%d;0H*", page_pos);
 		WPAD_ScanPads();
 		u32 pressed = WPAD_ButtonsDown(0);
 		if (pressed & WPAD_BUTTON_HOME) {
@@ -103,10 +129,10 @@ int main(int argc, char **argv) {
 				break;
 			}
 		} else if (pressed & WPAD_BUTTON_UP) {
-			printf("\x1b[%d;0H ", disc);
+			printf("\x1b[%d;0H ", page_pos);
 			if (disc > 0) --disc;
 		} else if (pressed & WPAD_BUTTON_DOWN) {
-			printf("\x1b[%d;0H ", disc);
+			printf("\x1b[%d;0H ", page_pos);
 			if (disc < size - 1) ++disc;
 		}
 		VIDEO_WaitVSync();
