@@ -33,6 +33,7 @@ int main(int argc, char **argv) {
 
 	// This function initialises the attached controllers
 	WPAD_Init();
+	PAD_Init();
 
 	// Obtain the preferred video mode from the system
 	// This will correspond to the settings in the Wii menu
@@ -117,10 +118,12 @@ int main(int argc, char **argv) {
 		print(names + page * term_height, min(term_height, size - (page * term_height)), term_width);
 		printf("\x1b[%d;0H*", page_pos);
 		WPAD_ScanPads();
+		PAD_ScanPads();
 		u32 pressed = WPAD_ButtonsDown(0);
-		if (pressed & WPAD_BUTTON_HOME) {
+		u16 gc_pressed = PAD_ButtonsDown(0);
+		if ((pressed & WPAD_BUTTON_HOME) || (gc_pressed & PAD_BUTTON_START)) {
 			break;
-		} else if (pressed & WPAD_BUTTON_A) {
+		} else if ((pressed & WPAD_BUTTON_A) || (gc_pressed & PAD_BUTTON_A)) {
 			ioctlv change_disc[] = {{&disc, sizeof(disc)}};
 			ret = IOS_Ioctlv(fd, 0x08, 1, 0, change_disc);
 			if (ret != 0) {
@@ -128,10 +131,10 @@ int main(int argc, char **argv) {
 			} else {
 				break;
 			}
-		} else if (pressed & WPAD_BUTTON_UP) {
+		} else if ((pressed & WPAD_BUTTON_UP) || (gc_pressed & PAD_BUTTON_UP)) {
 			printf("\x1b[%d;0H ", page_pos);
 			if (disc > 0) --disc;
-		} else if (pressed & WPAD_BUTTON_DOWN) {
+		} else if ((pressed & WPAD_BUTTON_DOWN) || (gc_pressed & PAD_BUTTON_DOWN)) {
 			printf("\x1b[%d;0H ", page_pos);
 			if (disc < size - 1) ++disc;
 		}
